@@ -22,41 +22,23 @@
 const int kWidth = 500;
 const int kHeight = 500;
 
-struct skia_data
+void draw_line(SkCanvas *canvas)
 {
-	sk_sp<GrDirectContext> context;
-	sk_sp<SkSurface> surface;
-};
+	SkPaint p;
 
-static struct skia_data make_surface(int width, int height)
-{
-	sk_sp<const GrGLInterface> interface = nullptr;
-	sk_sp<GrDirectContext> context = GrDirectContexts::MakeGL(interface);
+	p.setColor(SK_ColorRED);
+	p.setAntiAlias(true);
+	p.setStyle(SkPaint::kStroke_Style);
+	p.setStrokeWidth(10);
 
-	GrGLFramebufferInfo framebufferInfo{
-		.fFBOID = 0,
-		.fFormat = GL_RGBA8,
-	};
-
-	SkColorType colorType = SkColorType::kRGBA_8888_SkColorType;
-	GrBackendRenderTarget backendRenderTarget = GrBackendRenderTargets::MakeGL(width, height,
-																			   0, // sample count
-																			   0, // stencil bits
-																			   framebufferInfo);
-
-	sk_sp<SkSurface> surface = SkSurfaces::WrapBackendRenderTarget(
-		context.get(),
-		backendRenderTarget,
-		GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
-		colorType, nullptr, nullptr);
-
-	return {context, surface};
+	canvas->drawLine(20, 20, 100, 100, p);
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+void draw_square(SkCanvas *canvas)
 {
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GL_TRUE);
+	SkPaint paint;
+	paint.setColor(SK_ColorBLUE);
+	canvas->drawRect({0, 0, 250, 250}, paint);
 }
 
 int main(int, char **)
@@ -71,32 +53,44 @@ int main(int, char **)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_REFRESH_RATE, 60);
 
-	GLFWwindow *window = glfwCreateWindow(kWidth, kHeight, "LearnOpenGL", NULL, NULL);
-
-	if (!window)
-	{
-		std::cerr << "Something wrong happened" << std::endl;
-		glfwTerminate();
-		return EXIT_FAILURE;
-	}
+	GLFWwindow *window = glfwCreateWindow(kWidth, kHeight, "CMake GLFW Project", NULL, NULL);
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1);
-	glfwSetKeyCallback(window, key_callback);
 
-	struct skia_data skia_data = make_surface(kWidth, kHeight);
-	SkCanvas *canvas = skia_data.surface->getCanvas();
+	// Setup Skia OpenGL context
+	sk_sp<const GrGLInterface> interface = GrGLMakeNativeInterface();
+	sk_sp<GrDirectContext> context = GrDirectContexts::MakeGL(interface);
+
+	// Create OpenGL framebuffer target
+	auto target = GrBackendRenderTargets::MakeGL(
+		kWidth, kHeight,
+		0, // sample count
+		0, // stencil bits
+		(GrGLFramebufferInfo){
+			.fFBOID = 0,
+			.fFormat = GL_RGBA8,
+		});
+
+	sk_sp<SkSurface> surface = SkSurfaces::WrapBackendRenderTarget(
+		context.get(),
+		target,
+		GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
+		SkColorType::kRGBA_8888_SkColorType, nullptr, nullptr);
+
+	SkCanvas *canvas = surface->getCanvas();
 
 	while (!glfwWindowShouldClose(window))
 	{
-		glfwWaitEvents();
+		glfwPollEvents();
 
-		SkPaint paint;
-		paint.setColor(SK_ColorWHITE);
-		canvas->drawPaint(paint);
-		paint.setColor(SK_ColorBLUE);
-		canvas->drawRect({0, 0, 250, 250}, paint);
-		skia_data.context->flush();
+		canvas->clear(SK_ColorWHITE);
+
+		draw_square(surface->getCanvas());
+		draw_line(surface->getCanvas());
+
+		context->flushAndSubmit();
 
 		glfwSwapBuffers(window);
 	}
